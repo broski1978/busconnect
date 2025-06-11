@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NZ Bus Routes Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+</head>
+<body>
+    <div id="map" style="height: 100vh; width: 100%;"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            var cityLookup = {}; // Stores ID-to-city mapping
+            var cityConnections = {}; // Stores connections for ALL cities
+            var circles = {}; // Stores circle objects for cities
+            var lastClickedCity = null; // Track last clicked city for resetting
+
+            console.log("Initializing map and loading CSV data...");
+
+            // Load root CSV file
+            Papa.parse("http://localhost:8000/root.csv", {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    console.log("Root CSV loaded:", results.data);
+
+                    results.data.forEach(row => {
+                        cityLookup[row.id] = {
+                            name: row.destination,
+                            coords: [parseFloat(row.lat), parseFloat(row.long)]
+                        };
+                        cityConnections[row.destination] = []; // Initialize empty connections list
+                    });
+
+                    console.log("City lookup created:", cityLookup);
+                    loadConnectionsData();
+                }
+            });
+
+            function loadConnectionsData() {
+                var cityList = ["Gisborne", "Napier", "Auckland", "Hamilton", "Whangarei", "New_Plymouth", "Rotorua", "Tauranga", "Wellington", "Whanganui", "Palmerston_North"];
+
+                cityList.forEach(city => {
+                    let csvUrl = `http://localhost:8000/${city.toLowerCase().replace(/ /g, "_")}.csv`;
+
+                    Papa.parse(csvUrl, {
+                        download: true,
+                        header: true,
+                        complete: function(results) {
+                            console.log(`${city} CSV loaded:`, results.data);
+
+                            results.data.forEach(row => {
+                                if (row.transfers == 0) { 
+                                    let destination = cityLookup[row.id];
+                                    if (destination) {
+                                        cityConnections[city].push(destination.name);
+                                    }
+                                }
+                            });
+
+                            console.log(`${city} Connections:`, cityConnections[city]);
+                        }
+                    });
+                });
+
+                setTimeout(initMap, 2000); 
+            }
+
+            function initMap() {
+                console.log("Initializing map...");
+                var map = L.map('map').setView([-38.5, 175.5], 7);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                var routesLayer = L.layerGroup().addTo(map);
+
+                function showRoutes(cityName) {
+                    routesLayer.clearLayers();
+                    console.log("Clicked city:", cityName);
+
+                    Object.values(circles).forEach(circle => {
+                        circle.setStyle({ color: "blue", fillColor: "blue" });
+                    });
+
+                    let cityData = Object.values(cityLookup).find(city => city.name === cityName);
+                    if (!cityData) {
+                        console.error("City not found:", cityName);
+                        return;
+                    }
+
+                    circles[cityName].setStyle({ color: "red", fillColor: "red" });
+
+                    console.log("Drawing routes for:", cityData.name);
+
+                    cityConnections[cityName].forEach(destination => {
+                        let destData = Object.values(cityLookup).find(d => d.name === destination);
+                        if (destData) {
+                            console.log("Connecting", cityData.name, "to", destData.name);
+
+                            let route = L.polyline([cityData.coords, destData.coords], { color: 'blue', opacity: 0 }).addTo(routesLayer);
+
+                            let fadeIn = 0;
+                            let interval = setInterval(() => {
+                                fadeIn += 0.05; 
+                                route.setStyle({ opacity: fadeIn });
+
+                                if (fadeIn >= 1) clearInterval(interval);
+                            }, 100);
+
+                            circles[destination].setStyle({ color: "purple", fillColor: "purple" });
+                        } else {
+                            console.warn("Destination not found:", destination);
+                        }
+                    });
+
+                    lastClickedCity = cityName; 
+                }
+
+                Object.values(cityLookup).forEach(city => {
+                    let circle = L.circle(city.coords, {
+                        color: "blue",
+                        fillColor: "blue",
+                        fillOpacity: 0.6,
+                        radius: 10000 
+                    })
+                    .addTo(map)
+                    .on('click', () => showRoutes(city.name));
+
+                    circles[city.name] = circle;
+                });
+
+                console.log("Circles added for all cities.");
+
+                map.on('click', function(event) {
+                    if (lastClickedCity !== null) {
+                        routesLayer.clearLayers();
+
+                        Object.values(circles).forEach(circle => {
+                            circle.setStyle({ color: "blue", fillColor: "blue" });
+                        });
+
+                        lastClickedCity = null; 
+                        console.log("Map reset!");
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

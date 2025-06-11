@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NZ Bus Frequency Map</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { margin: 0; }
+        #map { height: 100vh; width: 100vw; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const cityLookup = {};
+            const cityFrequencyConnections = {};
+            const circles = {};
+            let lastClickedCity = null;
+
+            Papa.parse("root.csv", {
+                download: true,
+                header: true,
+                	complete: function (results) {
+					console.log("Parsed root.csv", results.data);
+
+					results.data.forEach(row => {
+						console.log("Adding city", row.id, row.destination, row.lat, row.long);
+						cityLookup[row.id] = {
+							name: row.destination,
+							coords: [parseFloat(row.lat), parseFloat(row.long)]
+						};
+						cityFrequencyConnections[row.destination] = [];
+					});
+
+					loadFrequencyData();
+			}
+            });
+		
+
+
+            function loadFrequencyData() {
+                const cityList = [
+                    "Gisborne", "Napier", "Auckland", "Hamilton", "Whangarei",
+                    "New_Plymouth", "Rotorua", "Tauranga", "Wellington",
+                    "Whanganui", "Palmerston_North"
+                ];
+
+                let filesToLoad = cityList.length;
+
+                cityList.forEach(city => {
+                    const file = city.toLowerCase().replace(/ /g, "_") + ".csv";
+
+                    Papa.parse(file, {
+						download: true,
+						header: true,
+						complete: function (results) {
+							
+
+							const freqMap = {};
+
+							results.data.forEach(row => {
+								const destId = row.id;
+								const freq = parseInt(row.frequency);
+								if (!isNaN(freq) && destId) {
+									if (!freqMap[destId]) freqMap[destId] = 0;
+									freqMap[destId] += freq;
+								}
+							});
+
+							
+
+							if (!cityFrequencyConnections[city]) {
+								cityFrequencyConnections[city] = [];
+							}
+
+							Object.keys(freqMap).forEach(destId => {
+								const destCity = cityLookup[destId]?.name;
+								
+
+								if (destCity) {
+									cityFrequencyConnections[city].push({
+										to: destCity,
+										freq: freqMap[destId]
+									});
+									
+								} else {
+									
+								}
+							});
+
+							filesToLoad--;
+							if (filesToLoad === 0) {
+								console.log("✅ Finished loading all city connections:", cityFrequencyConnections);
+								initMap();
+							}
+						}
+					});
+
+                });
+            }
+
+            function initMap() {
+                const map = L.map('map').setView([-38.5, 175.5], 7);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+				
+				
+
+				
+
+
+                const routesLayer = L.layerGroup().addTo(map);
+
+                function showFrequencies(cityName) {
+					console.log("Clicked city:", cityName);
+					console.log("Connections:", cityFrequencyConnections[cityName]);
+
+					routesLayer.clearLayers();
+
+					Object.values(circles).forEach(c => {
+						c.setStyle({ color: "blue", fillColor: "blue" });
+					});
+
+					const connections = cityFrequencyConnections[cityName];
+					const fromCoords = Object.values(cityLookup).find(c => c.name === cityName)?.coords;
+					if (!connections || !fromCoords) {
+						console.warn("No connections or fromCoords for city", cityName);
+						return;
+					}
+					function normalize(name) {
+						return name.trim().toLowerCase().replace(/_/g, " ");
+					}
+
+					console.log("Drawing lines for city:", cityName);
+
+					let linesDrawn = 0;
+
+					connections.forEach(conn => {
+						console.log(`🔴 Drawing from ${cityName} to ${conn.to} with freq ${conn.freq}`);
+
+						const toCoords = Object.values(cityLookup).find(c => normalize(c.name) === normalize(conn.to))?.coords;
+						console.log("From coords:", fromCoords);
+						console.log("To coords:", toCoords);
+
+						if (!toCoords) {
+							console.warn("❌ No coordinates found for destination:", conn.to);
+							return;
+						}
+
+						linesDrawn++;
+
+						L.polyline([fromCoords, toCoords], {
+							color: 'blue',
+							weight: Math.max(1, conn.freq / 5),
+							opacity: 0.7
+						}).addTo(routesLayer);
+					});
+
+					console.log(`✅ Total lines drawn: ${linesDrawn}`);
+
+
+
+
+					circles[cityName].setStyle({ color: "orange", fillColor: "orange" });
+					lastClickedCity = cityName;
+				}
+
+
+                Object.values(cityLookup).forEach(city => {
+                    const circle = L.circle(city.coords, {
+                        color: "blue",
+                        fillColor: "blue",
+                        fillOpacity: 0.6,
+                        radius: 10000
+                    }).addTo(map).on('click', () => showFrequencies(city.name));
+
+                    circles[city.name] = circle;
+                });
+
+                map.on('click', function () {
+                    if (lastClickedCity !== null) {
+                        routesLayer.clearLayers();
+                        Object.values(circles).forEach(c => {
+                            c.setStyle({ color: "blue", fillColor: "blue" });
+                        });
+                        lastClickedCity = null;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+

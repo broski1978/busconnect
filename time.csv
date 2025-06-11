@@ -1,0 +1,56 @@
+From,To,Driving Time,distance
+Whangarei,Auckland,2.09,157
+Whangarei,Hamilton,3.27,280
+Whangarei,Rotorua,4.37,382
+Whangarei,Gisborne,8.13,653
+Whangarei,Napier,6.57,567
+Whangarei,New Plymouth,6.33,515
+Whangarei,Whanganui,7.30,600
+Whangarei,Palmerston North,8.08,668
+Whangarei,Tauranga,4.36,355
+Whangarei,Wellington,9.33,797
+Auckland,Hamilton,1.27,124
+Auckland,Rotorua,2.37,226
+Auckland,Gisborne,6.12,498
+Auckland,Napier,4.56,411
+Auckland,New Plymouth,4.33,358
+Auckland,Whanganui,5.37,445
+Auckland,Palmerston North,6.08,512
+Auckland,Tauranga,2.42,200
+Auckland,Wellington,7.32,641
+Hamilton,Rotorua,1.23,105
+Hamilton,Gisborne,4.59,374
+Hamilton,Napier,3.43,290
+Hamilton,New Plymouth,3.16,238
+Hamilton,Whanganui,4.20,325
+Hamilton,Palmerston North,4.54,391
+Hamilton,Tauranga,1.22,103
+Hamilton,Wellington,6.19,520
+Rotorua,Gisborne,3.49,274
+Rotorua,Napier,2.51,220
+Rotorua,New Plymouth,3.52,294
+Rotorua,Whanganui,3.57,302
+Rotorua,Palmerston North,4.06,324
+Rotorua,Tauranga,1.0,59
+Rotorua,Wellington,5.31,453
+Gisborne,Napier,3.09,215
+Gisborne,New Plymouth,7.33,563
+Gisborne,Whanganui,6.14,463
+Gisborne,Palmerston North,5.26,392
+Gisborne,Tauranga,3.41,275
+Gisborne,Wellington,7,533
+Napier,New Plymouth,5.28,412
+Napier,Whanganui,3.19,253
+Napier,Palmerston North,2.3,183
+Napier,Tauranga,3.44,287
+Napier,Wellington,4.05,323
+New Plymouth,Whanganui,2.1,159
+New Plymouth,Palmerston North,3.06,232
+New Plymouth,Tauranga,4.08,309
+New Plymouth,Wellington,4.29,353
+Whanganui,Palmerston North,0.58,73
+Whanganui,Tauranga,4.45,367
+Whanganui,Wellington,2.21,194
+Palmerston North,Tauranga,4.59,391
+Palmerston North,Wellington,1.45,142
+Tauranga,Wellington,6.27,523

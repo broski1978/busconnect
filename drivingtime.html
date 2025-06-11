@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NZ Bus Frequency Map with Time Filter</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { margin: 0; }
+        #map { height: 100vh; width: 100vw; }
+        #filter-container {
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            z-index: 1000; 
+            background: white; 
+            padding: 8px 12px; 
+            border-radius: 5px; 
+            font-family: Arial, sans-serif;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        #filter-container label {
+            font-size: 14px;
+            margin-bottom: 4px;
+            display: block;
+        }
+        #timeFilter {
+            width: 180px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+
+
+    <div id="filter-container">
+        <label for="timeFilter">Max Bus Trip Time (% over car trip): <span id="timeValue">100</span>%</label>
+        <input type="range" id="timeFilter" min="120" max="300" value="150" />
+    </div>
+
+    <script>
+	document.addEventListener("DOMContentLoaded", function () {
+		const cityLookup = {};
+		let cityFrequencyConnections = {};  // filtered & aggregated routes per city for mapping
+		const cityRouteData = {};            // raw route data per city for dynamic filtering
+		const circles = {};
+		let lastClickedCity = null;
+
+		const carDrivingTimes = {};  // key: 'FromID_ToID' -> driving time (float)
+
+		// Load car driving times first
+		Papa.parse("final_travel_times.csv", {
+			download: true,
+			header: true,
+			complete: function (results) {
+				results.data.forEach(row => {
+					const from = row.From_ID || row["From_ID"];
+					const to = row.To_ID || row["To_ID"];
+					if (from && to) {
+						carDrivingTimes[`${from}_${to}`] = parseFloat(row["Driving Time"]);
+					}
+				});
+				loadCityLookupAndFrequency();
+			}
+		});
+
+		// Load city lookup and frequency data
+		function loadCityLookupAndFrequency() {
+			Papa.parse("root.csv", {
+				download: true,
+				header: true,
+				complete: function (results) {
+					results.data.forEach(row => {
+						cityLookup[row.id] = {
+							name: row.destination,
+							coords: [parseFloat(row.lat), parseFloat(row.long)]
+						};
+						cityFrequencyConnections[row.destination] = [];
+						cityRouteData[row.destination] = []; // prepare empty array
+					});
+					loadFrequencyData();
+				}
+			});
+		}
+
+		// Load frequency data for each city - store raw routes
+		function loadFrequencyData() {
+			const cityList = [
+				"Gisborne", "Napier", "Auckland", "Hamilton", "Whangarei",
+				"New_Plymouth", "Rotorua", "Tauranga", "Wellington",
+				"Whanganui", "Palmerston_North"
+			];
+
+			let filesToLoad = cityList.length;
+
+			cityList.forEach(city => {
+				const file = city.toLowerCase().replace(/ /g, "_") + ".csv";
+
+				Papa.parse(file, {
+					download: true,
+					header: true,
+					complete: function (results) {
+						const fromId = Object.entries(cityLookup).find(([id, data]) => data.name === city)?.[0];
+						if (!fromId) {
+							console.warn(`No fromId found for city ${city}`);
+							filesToLoad--;
+							if (filesToLoad === 0) {
+								filterAndAggregateRoutes();
+								initMap();
+							}
+							return;
+						}
+
+						results.data.forEach(row => {
+							const destId = row.id;
+							const freq = parseInt(row.frequency);
+							const busTime = parseFloat(row.time);
+
+							if (isNaN(freq) || isNaN(busTime) || !destId) return;
+
+							const destCity = cityLookup[destId]?.name;
+							if (!destCity) return;
+
+							// Store raw route data for filtering later
+							cityRouteData[city].push({
+								destId,
+								freq,
+								busTime
+							});
+						});
+
+						filesToLoad--;
+						if (filesToLoad === 0) {
+							filterAndAggregateRoutes();
+							initMap();
+						}
+					}
+				});
+			});
+		}
+
+		let maxTimePercent = 1.5;  // default filter: 150%
+
+		// Filter and aggregate route data based on current maxTimePercent
+		function filterAndAggregateRoutes() {
+			cityFrequencyConnections = {}; // reset
+
+			Object.entries(cityRouteData).forEach(([city, routes]) => {
+				const fromId = Object.entries(cityLookup).find(([id, data]) => data.name === city)?.[0];
+				if (!fromId) return;
+
+				const freqMap = {};  // destId -> total freq
+
+				routes.forEach(({ destId, freq, busTime }) => {
+					const drivingTime = carDrivingTimes[`${fromId}_${destId}`];
+					if (!drivingTime) return;
+
+					if (busTime <= drivingTime * maxTimePercent) {
+						freqMap[destId] = (freqMap[destId] || 0) + freq;
+					}
+				});
+
+				cityFrequencyConnections[city] = Object.keys(freqMap).map(destId => ({
+					to: cityLookup[destId].name,
+					freq: freqMap[destId]
+				}));
+			});
+		}
+
+		function initMap() {
+			const map = L.map('map').setView([-38.5, 175.5], 7);
+			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+				attribution: '&copy; OpenStreetMap contributors'
+			}).addTo(map);
+
+			const routesLayer = L.layerGroup().addTo(map);
+
+			const timeFilterSlider = document.getElementById('timeFilter');
+			const timeValueSpan = document.getElementById('timeValue');
+
+			// Update maxTimePercent from slider and re-filter + redraw
+			timeFilterSlider.addEventListener('input', () => {
+				maxTimePercent = (parseInt(timeFilterSlider.value) || 100) / 100;
+				timeValueSpan.textContent = (maxTimePercent * 100).toFixed(0);
+				filterAndAggregateRoutes();
+				if (lastClickedCity) {
+					showFrequencies(lastClickedCity);
+				}
+			});
+
+			function showFrequencies(cityName) {
+				routesLayer.clearLayers();
+
+				Object.entries(circles).forEach(([name, circle]) => {
+					circle.setStyle({ color: "blue", fillColor: "blue" });
+				});
+
+				const connections = cityFrequencyConnections[cityName];
+
+				const fromCoords = Object.values(cityLookup).find(c => c.name === cityName)?.coords;
+				const fromId = Object.entries(cityLookup).find(([id, data]) => data.name === cityName)?.[0];
+
+				if (!connections || !fromCoords || !fromId) {
+					console.warn("Missing connections or coordinates for", cityName);
+					return;
+				}
+
+				let linesDrawn = 0;
+
+				connections.forEach(conn => {
+					const toCoords = Object.values(cityLookup).find(c => c.name === conn.to)?.coords;
+					const toId = Object.entries(cityLookup).find(([id, data]) => data.name === conn.to)?.[0];
+					const drivingTime = carDrivingTimes[`${fromId}_${toId}`];
+
+					if (!toCoords || !drivingTime) {
+						console.warn(`Missing data for route ${cityName} -> ${conn.to}`);
+						return;
+					}
+
+					// Bus time filtering was done already, so no need to check here
+
+					linesDrawn++;
+
+					L.polyline([fromCoords, toCoords], {
+						color: 'red',
+						weight: Math.max(1, conn.freq / 5),
+						opacity: 0.7
+					}).addTo(routesLayer);
+				});
+
+				console.log(`Total lines drawn: ${linesDrawn}`);
+
+				if (circles[cityName]) {
+					circles[cityName].setStyle({ color: "red", fillColor: "red" });
+				}
+				lastClickedCity = cityName;
+			}
+
+			// Add circles for each city
+			Object.values(cityLookup).forEach(city => {
+				const circle = L.circle(city.coords, {
+					color: "blue",
+					fillColor: "blue",
+					fillOpacity: 0.6,
+					radius: 10000
+				}).addTo(map).on('click', () => showFrequencies(city.name));
+
+				circles[city.name] = circle;
+			});
+
+			// Clear lines and reset when clicking empty map space
+			map.on('click', function () {
+				if (lastClickedCity !== null) {
+					routesLayer.clearLayers();
+					Object.values(circles).forEach(c => {
+						c.setStyle({ color: "blue", fillColor: "blue" });
+					});
+					lastClickedCity = null;
+				}
+			});
+		}
+
+	});
+	</script>
+
+</body>
+</html>
