@@ -43,7 +43,7 @@
 
             console.log("Initializing map and loading CSV data...");
 
-            Papa.parse("http://localhost:8000/root.csv", {
+            Papa.parse("root.csv", {
                 download: true,
                 header: true,
                 complete: function(results) {
@@ -64,7 +64,7 @@
                 var cityList = ["Gisborne", "Napier", "Auckland", "Hamilton", "Whangarei", "New_Plymouth", "Rotorua", "Tauranga", "Wellington", "Whanganui", "Palmerston_North"];
 
                 cityList.forEach(city => {
-                    let csvUrl = `http://localhost:8000/${city.toLowerCase().replace(/ /g, "_")}.csv`;
+                    let csvUrl = `${city.toLowerCase().replace(/ /g, "_")}.csv`;
 
                     Papa.parse(csvUrl, {
                         download: true,
